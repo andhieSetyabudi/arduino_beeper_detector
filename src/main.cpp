@@ -1,63 +1,42 @@
-#include <Arduino.h>
-#include "arduinoFFT.h"
-#include "flag_ship.h"
-
-
-#define AU_PIN      A0
-#define GAIN_PIN    4U
-#define LED1_PIN    2U
-#define LED2_PIN    3U
+#include "main.h"
 
 const uint8_t pin_map[] = {GAIN_PIN, LED1_PIN, LED2_PIN};
 
-void adc_deinit();
-void adc_init();
-
-const int MAX_RESULTS = 64;
-
-volatile int results [MAX_RESULTS];
-volatile int resultNumber;
-
-
+flag_ship flag_state;
 arduinoFFT FFT = arduinoFFT(); /* Create FFT object */
 /*
 These are the input and output vectors
 Input vectors receive computed results from FFT
 */
-void preEmphasis(int* val,int n,float s)
-{
-  int* tmp = (int*)malloc(n * sizeof(int));
-  for(int a = 0; a<n; a++)
-  {
-    if(a ==0)
-      tmp[a] = val[a];
-    else
-      tmp[a] =(int) ( (float) val[a] - (s*(float)val[a-1]));
-  }
-  memcpy(val,tmp,n);
-  free(tmp);
-}
-
-void PrintVector(double *vData, uint16_t bufferSize, uint8_t scaleType);
 
 // ADC complete ISR
+bool ADC_current = false;
 ISR (ADC_vect)
 {
-
-  
-    results[resultNumber++] = ADC;
-    if(resultNumber == MAX_RESULTS)
-    {
-      ADCSRA = 0;  // turn off ADC
-    }
+  results[resultNumber++] = ADC;
+  if(resultNumber == MAX_RESULTS)
+  {
+    // ADCSRA = 0;  // turn off ADC
+    ADMUX = ADCH5;
+    ADC_current = true;
+    return;
+  }
+  if(ADC_current)
+  {
+    adcCurrent = ADC;
+    ADMUX = ADCH0;
+    ADC_current = false;
+    ADCSRA = 0;
+  }
+  return;
 } 
 EMPTY_INTERRUPT (TIMER1_COMPB_vect);
 
-
-flag_ship flag_state;
-
 void setup() {
-  // Serial.begin(500000);
+  #if DEBUG_MODE
+    Serial.begin(500000);
+  #endif
+
   for(uint8_t p = 0; p<sizeof(pin_map); p++)
   {
     pinMode(pin_map[p], OUTPUT);
@@ -66,46 +45,39 @@ void setup() {
   digitalWrite(GAIN_PIN,HIGH);
   pinMode(LED_BUILTIN, OUTPUT);
 
+  // button init state
+  pinMode(BUTTON_UP_PIN, INPUT_PULLUP);
+  pinMode(BUTTON_DOWN_PIN, INPUT_PULLUP);
+  // MOTOR phase state
+  pinMode(MOTOR_PHASE1_PIN, OUTPUT);
+  pinMode(MOTOR_PHASE2_PIN, OUTPUT);
   flag_state.SetStateAndTime(HIGH);
   adc_init();
 }
 
-int ledState = LOW;
-uint8_t state_det = 0;
-uint8_t state_flag = 0, last_state_flag=0;
-volatile uint32_t state_time = 0;
-const uint32_t state_time_hold = 1000UL;
-volatile uint32_t timeMils=0;
+
 void loop() {
    
-  if( resultNumber>= MAX_RESULTS )
+  if( resultNumber>= MAX_RESULTS & ADC_current)
   {
     double* vReal = (double*)malloc(MAX_RESULTS * sizeof(double));
     double* vImag = (double*)malloc(MAX_RESULTS * sizeof(double));
-//     double vReal[MAX_RESULTS];
-// double vImag[MAX_RESULTS];
     preEmphasis(results,MAX_RESULTS,0.97);
     for (int i = 0; i < MAX_RESULTS; i++)
     {
       vReal[i] = int8_t(results [i]); 
       vImag[i] = 0.0; 
-      // Serial.println (results [i]);
+      #if DEBUG_MODE
+        Serial.println (results [i]);
+      #endif
     }
+    #if DEBUG_MODE
+      Serial.println(" nilai ADC sensor ARUS "+String(adcCurrent));
+    #endif
     resultNumber = 0;
-    /* Print the results of the simulated sampling according to time */
-    // Serial.println("Data:");
-    // PrintVector(vReal, MAX_RESULTS, 0);
     FFT.Windowing(vReal, MAX_RESULTS, FFT_WIN_TYP_HAMMING, FFT_FORWARD);	/* Weigh data */
-    // Serial.println("Weighed data:");
-    // PrintVector(vReal, MAX_RESULTS, 0);
     FFT.Compute(vReal, vImag, MAX_RESULTS, FFT_FORWARD); /* Compute FFT */
-    // Serial.println("Computed Real values:");
-    // PrintVector(vReal, MAX_RESULTS, 1);
-    // Serial.println("Computed Imaginary values:");
-    // PrintVector(vImag, MAX_RESULTS, 1);
     FFT.ComplexToMagnitude(vReal, vImag, MAX_RESULTS); /* Compute magnitudes */
-    // Serial.println("Computed magnitudes:");
-    // PrintVector(vReal, (MAX_RESULTS >> 1), 2);
     double f_, v_ ;
     FFT.MajorPeak(vReal, MAX_RESULTS, 50e+3, &f_, &v_);
     free(vImag);  free(vReal);
@@ -138,8 +110,10 @@ void loop() {
         digitalWrite(LED1_PIN, LOW);
         break;
     };
+
+    adcCurrent = abs(adcCurrent - 512);
+    adcLastCurrent = adcLastCurrent;
     adc_deinit();
-    // Serial.println("======================");
   }
   
   if(millis() - timeMils >= 1000U)
@@ -152,6 +126,23 @@ void loop() {
     digitalWrite(LED_BUILTIN, ledState);
     timeMils = millis();
   };
+  if( millis() - buttonMillis >= 150 )
+  {
+    buttonMillis = millis();
+    if( adcLastCurrent <= 100 && adcCurrent <= 100 )
+    {
+      digitalWrite(MOTOR_PHASE1_PIN, digitalRead(BUTTON_DOWN_PIN)==HIGH ? LOW:HIGH);
+      digitalWrite(MOTOR_PHASE2_PIN, digitalRead(BUTTON_UP_PIN)==HIGH ? LOW:HIGH);
+    }
+    else
+    {
+      digitalWrite(MOTOR_PHASE1_PIN, LOW);
+      digitalWrite(MOTOR_PHASE2_PIN, LOW);
+      buttonMillis+= 100;
+    }
+      
+  }
+  
 }
 
 void adc_init()
@@ -179,6 +170,24 @@ void adc_deinit()
    // turn ADC back on
 }
 
+
+void preEmphasis(int* val,int n,float s)
+{
+  int* tmp = (int*)malloc(n * sizeof(int));
+  for(int a = 0; a<n; a++)
+  {
+    if(a ==0)
+      tmp[a] = val[a];
+    else
+      tmp[a] =(int) ( (float) val[a] - (s*(float)val[a-1]));
+  }
+  memcpy(val,tmp,n);
+  free(tmp);
+}
+
+
+#if DEBUG_MODE
+
 void PrintVector(double *vData, uint16_t bufferSize, uint8_t scaleType)
 {
   for (uint16_t i = 0; i < bufferSize; i++)
@@ -205,3 +214,5 @@ void PrintVector(double *vData, uint16_t bufferSize, uint8_t scaleType)
   }
   Serial.println();
 }
+
+#endif
