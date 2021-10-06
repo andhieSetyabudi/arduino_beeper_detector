@@ -5,22 +5,23 @@
 
 
 #include <Arduino.h>
+#include <avr/wdt.h>
 #include "arduinoFFT.h"
 #include "flag_ship.h"
 
 
 #define DEBUG_MODE      0
 // motor up-down
-#define BUTTON_UP_PIN     2U    
-#define BUTTON_DOWN_PIN   3U
-#define MOTOR_PHASE1_PIN  6U
-#define MOTOR_PHASE2_PIN  7U
+#define BUTTON_UP_PIN     4U    
+#define BUTTON_DOWN_PIN   5U
+#define MOTOR_PHASE1_PIN  7U
+#define MOTOR_PHASE2_PIN  8U
 
 
 #define AU_PIN      A0
-#define GAIN_PIN    4U
-#define LED1_PIN    9U
-#define LED2_PIN    10U
+#define GAIN_PIN    2U
+#define LED1_PIN    11U
+#define LED2_PIN    12U
 
 
 

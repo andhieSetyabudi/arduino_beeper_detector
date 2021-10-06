@@ -51,6 +51,7 @@ void setup() {
   // MOTOR phase state
   pinMode(MOTOR_PHASE1_PIN, OUTPUT);
   pinMode(MOTOR_PHASE2_PIN, OUTPUT);
+  wdt_enable(WDTO_1S);
   flag_state.SetStateAndTime(HIGH);
   adc_init();
 }
@@ -129,7 +130,7 @@ void loop() {
   if( millis() - buttonMillis >= 150 )
   {
     buttonMillis = millis();
-    if( adcLastCurrent <= 100 && adcCurrent <= 100 )
+    if( adcLastCurrent <= 156 && adcCurrent <= 156 )
     {
       digitalWrite(MOTOR_PHASE1_PIN, digitalRead(BUTTON_DOWN_PIN)==HIGH ? LOW:HIGH);
       digitalWrite(MOTOR_PHASE2_PIN, digitalRead(BUTTON_UP_PIN)==HIGH ? LOW:HIGH);
@@ -142,7 +143,7 @@ void loop() {
     }
       
   }
-  
+  wdt_reset();  
 }
 
 void adc_init()
