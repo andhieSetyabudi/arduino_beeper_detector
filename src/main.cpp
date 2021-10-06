@@ -1,4 +1,6 @@
 #include "main.h"
+#include "avr/wdt.h"
+// #include "WatchDog.h"
 
 const uint8_t pin_map[] = {GAIN_PIN, LED1_PIN, LED2_PIN};
 
@@ -14,7 +16,7 @@ bool ADC_current = false;
 ISR (ADC_vect)
 {
   results[resultNumber++] = ADC;
-  if(resultNumber == MAX_RESULTS)
+  if(resultNumber >= MAX_RESULTS && !ADC_current )
   {
     // ADCSRA = 0;  // turn off ADC
     ADMUX = ADCH5;
@@ -51,7 +53,7 @@ void setup() {
   // MOTOR phase state
   pinMode(MOTOR_PHASE1_PIN, OUTPUT);
   pinMode(MOTOR_PHASE2_PIN, OUTPUT);
-  wdt_enable(WDTO_1S);
+  wdt_enable(WDTO_500MS);
   flag_state.SetStateAndTime(HIGH);
   adc_init();
 }
@@ -59,7 +61,7 @@ void setup() {
 
 void loop() {
    
-  if( resultNumber>= MAX_RESULTS & ADC_current)
+  if( ( resultNumber >= MAX_RESULTS ) & ADC_current)
   {
     double* vReal = (double*)malloc(MAX_RESULTS * sizeof(double));
     double* vImag = (double*)malloc(MAX_RESULTS * sizeof(double));
@@ -113,7 +115,6 @@ void loop() {
     };
 
     adcCurrent = abs(adcCurrent - 512);
-    adcLastCurrent = adcLastCurrent;
     adc_deinit();
   }
   
@@ -130,7 +131,7 @@ void loop() {
   if( millis() - buttonMillis >= 150 )
   {
     buttonMillis = millis();
-    if( adcLastCurrent <= 156 && adcCurrent <= 156 )
+    if( ( adcLastCurrent <= 256 ) && ( adcCurrent <= 256 ) )
     {
       digitalWrite(MOTOR_PHASE1_PIN, digitalRead(BUTTON_DOWN_PIN)==HIGH ? LOW:HIGH);
       digitalWrite(MOTOR_PHASE2_PIN, digitalRead(BUTTON_UP_PIN)==HIGH ? LOW:HIGH);
@@ -139,11 +140,11 @@ void loop() {
     {
       digitalWrite(MOTOR_PHASE1_PIN, LOW);
       digitalWrite(MOTOR_PHASE2_PIN, LOW);
-      buttonMillis+= 100;
+      // buttonMillis+= 100;
     }
-      
+    wdt_reset();  
+    adcLastCurrent = adcCurrent;
   }
-  wdt_reset();  
 }
 
 void adc_init()

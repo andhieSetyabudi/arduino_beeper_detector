@@ -1,3 +1,4 @@
+#pragma once
 #ifndef main_h
 #define main_h
 
@@ -5,7 +6,7 @@
 
 
 #include <Arduino.h>
-#include <avr/wdt.h>
+
 #include "arduinoFFT.h"
 #include "flag_ship.h"
 
@@ -36,11 +37,11 @@
 // variables
 const int MAX_RESULTS = 64;
 
-volatile int results [MAX_RESULTS];
+int results [MAX_RESULTS];
 volatile int resultNumber;
 
-volatile int adcCurrent;
-volatile int adcLastCurrent;
+volatile int adcCurrent = 0;
+volatile int adcLastCurrent = 0;
 
 
 
